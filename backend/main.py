@@ -35,7 +35,6 @@ app.include_router(company_routes.router, prefix="/api")
 def root():
     return {"message": "Backend up and ready"}
 
-
-
-
-
+# if __name__ == "__main__":
+#     import uvicorn
+#     uvicorn.run(app, host="0.0.0.0", port=8000)

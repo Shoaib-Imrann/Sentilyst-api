@@ -41,6 +41,7 @@ build/
 # Local env files
 .env
 .env.*
+!.env.template
 
 # Database
 *.db
