@@ -14,11 +14,13 @@ load_dotenv()
 app = FastAPI()
 
 CLIENT_URL = os.getenv("CLIENT_URL")
+PROD_CLIENT_URL = os.getenv("PROD_CLIENT_URL")
+
+allowed_origins = [CLIENT_URL, PROD_CLIENT_URL] if CLIENT_URL else [PROD_CLIENT_URL]
 
 app.add_middleware(
     CORSMiddleware,
-    # allow_origins=["http://localhost:5173"],
-    allow_origins=[CLIENT_URL],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

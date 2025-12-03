@@ -264,7 +264,7 @@ async def get_user_data(request: Request):
         })
 
     except Exception as e:
-        # print("🔥 Error in get_user_data:", e)
+        # print("Error in get_user_data:", e)
         return JSONResponse(
             status_code=500,
             content={"success": False, "message": "Error fetching user data"},
