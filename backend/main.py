@@ -16,8 +16,16 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logging.getLogger("httpx").setLevel(logging.WARNING)
+logger = logging.getLogger("sentilyst")
 
 app = FastAPI()
+
+@app.on_event("startup")
+async def startup_event():
+    logger.info("Warming up sentiment model...")
+    from services.sentiment_analysis import warmup_model
+    warmup_model()
+    logger.info("Model warmed up and ready")
 
 CLIENT_URL = os.getenv("CLIENT_URL")
 PROD_CLIENT_URL = os.getenv("PROD_CLIENT_URL")

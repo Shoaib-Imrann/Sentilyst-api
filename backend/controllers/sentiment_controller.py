@@ -2,7 +2,7 @@
 from fastapi import Request, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from services.scraper import scrape_reddit, scrape_google_news
-from services.sentiment_analysis import analyze_text, calculate_risk
+from services.sentiment_analysis import analyze_batch, calculate_risk
 from supabase import create_client, Client
 import os
 import time
@@ -38,44 +38,34 @@ async def analyze_sentiment(request: Request):
     t1 = time.time()
     logger.info(f"SCRAPING TOOK: {t1 - t0:.2f}s | Reddit: {len(reddit_data)} | Google News: {len(google_data)} | Total: {len(scraped_data)}")
 
-    # 2) Preprocess
-    logger.info(f"Processing {len(scraped_data)} items")
+    # 2) Preprocess - cap at 30 items and truncate text
+    scraped_data_capped = scraped_data[:30]
+    texts = [(post.split(" - ", 1)[0] if " - " in post else post)[:500] for post in scraped_data_capped]
+    t2 = time.time()
+    logger.info(f"PREPROCESS TOOK: {t2 - t1:.2f}s | Processed {len(texts)} items")
+    
+    # 3) Model inference
+    results = analyze_batch(texts)
+    t3 = time.time()
+    logger.info(f"MODEL INFERENCE TOOK: {t3 - t2:.2f}s")
+    
+    # 4) Aggregation
     sentiment_count = {"positive": 0, "neutral": 0, "negative": 0}
     sentiment_confidences = {"positive": [], "neutral": [], "negative": []}
-    
-    t_split = 0
-    t_inference = 0
-    for i, post in enumerate(scraped_data):
-        ts = time.time()
-        text, _ = post.split(" - ", 1) if " - " in post else (post, "")
-        t_split += time.time() - ts
-        
-        ti = time.time()
-        label, conf = analyze_text(text)
-        t_inference += time.time() - ti
-        
+    for label, conf in results:
         key = label.lower()
         sentiment_count[key] += 1
         sentiment_confidences[key].append(conf)
-        
-        if (i + 1) % 10 == 0:
-            logger.info(f"Processed {i + 1}/{len(scraped_data)} items")
     
-    t2 = time.time()
-    logger.info(f"Text splitting took: {t_split:.2f}s")
-    logger.info(f"Model inference took: {t_inference:.2f}s")
-    logger.info(f"PREPROCESS TOOK: {t2 - t1:.2f}s")
-
-    # 3) Model inference (aggregation)
     total = sum(sentiment_count.values()) or 1
     sentiment_percentages = {
         k: round(v / total * 100, 2) for k, v in sentiment_count.items()
     }
     risk_level = calculate_risk(sentiment_percentages, sentiment_confidences)
-    t3 = time.time()
-    logger.info(f"MODEL INFERENCE TOOK: {t3 - t2:.2f}s")
+    t4 = time.time()
+    logger.info(f"AGGREGATION TOOK: {t4 - t3:.2f}s")
 
-    # 4) DB/Storage
+    # 5) DB/Storage
     if user:
         ist_time = datetime.utcnow() + timedelta(hours=5, minutes=30)
         insert_data = {
@@ -95,9 +85,9 @@ async def analyze_sentiment(request: Request):
         saved_created_at = insert_data["created_at"]
     else:
         saved_created_at = datetime.now().date().isoformat()
-    t4 = time.time()
-    logger.info(f"AGG+SAVE TOOK: {t4 - t3:.2f}s")
-    logger.info(f"TOTAL REQUEST TIME: {t4 - t0:.2f}s")
+    t5 = time.time()
+    logger.info(f"DB SAVE TOOK: {t5 - t4:.2f}s")
+    logger.info(f"TOTAL REQUEST TIME: {t5 - t0:.2f}s")
     
     return JSONResponse({
         "query": query,
