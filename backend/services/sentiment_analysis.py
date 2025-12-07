@@ -1,9 +1,14 @@
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import os
+
+# Cache model locally to speed up deployments
+MODEL_NAME = "distilbert-base-uncased-finetuned-sst-2-english"
+CACHE_DIR = os.getenv("HF_HOME", "./model_cache")
 
 # Load tokenizer and model at module level (once)
-tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
-model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, cache_dir=CACHE_DIR)
+model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, cache_dir=CACHE_DIR)
 model.eval()
 
 def warmup_model():

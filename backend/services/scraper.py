@@ -4,10 +4,13 @@ import feedparser
 from urllib.parse import quote_plus
 
 def scrape_reddit(query):
-    headers = {"User-Agent": "SentilystBot/0.1 by imran"}
-    url = f"https://www.reddit.com/search.json?q={query}&limit=50"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
+    encoded_query = quote_plus(query)
+    url = f"https://www.reddit.com/search.json?q={encoded_query}&limit=50"
     try:
-        res = requests.get(url, headers=headers)
+        res = requests.get(url, headers=headers, timeout=10)
         res.raise_for_status()
         posts = res.json()["data"]["children"]
         results = [f"{p['data']['title']} - https://reddit.com{p['data']['permalink']}" for p in posts]
