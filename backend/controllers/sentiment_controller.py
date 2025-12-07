@@ -36,7 +36,7 @@ async def analyze_sentiment(request: Request):
     google_data = scrape_google_news(query)
     scraped_data = reddit_data + google_data
     t1 = time.time()
-    logger.info(f"SCRAPING TOOK: {t1 - t0:.2f}s")
+    logger.info(f"SCRAPING TOOK: {t1 - t0:.2f}s | Reddit: {len(reddit_data)} | Google News: {len(google_data)} | Total: {len(scraped_data)}")
 
     # 2) Preprocess
     sentiment_count = {"positive": 0, "neutral": 0, "negative": 0}
