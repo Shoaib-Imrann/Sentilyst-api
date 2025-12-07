@@ -6,10 +6,16 @@ from routes import news_routes
 from routes import company_routes
 from middleware.auth_middleware import AuthMiddleware
 import os
-# import psutil
+import logging
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 app = FastAPI()
 

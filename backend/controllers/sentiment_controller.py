@@ -5,10 +5,15 @@ from services.scraper import scrape_reddit, scrape_google_news
 from services.sentiment_analysis import analyze_text, calculate_risk
 from supabase import create_client, Client
 import os
+import time
+import logging
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger("sentilyst")
+logger.setLevel(logging.INFO)
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -16,6 +21,9 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
 async def analyze_sentiment(request: Request):
+    t0 = time.time()
+    logger.info("Request started")
+    
     data = await request.json()
     query = data.get("query")
     if not query:
@@ -23,11 +31,14 @@ async def analyze_sentiment(request: Request):
 
     user = getattr(request.state, "user", None)
 
+    # 1) Scraping
     reddit_data = scrape_reddit(query)
     google_data = scrape_google_news(query)
-    # reuters_data = scrape_reuters(query)
-    scraped_data = reddit_data + google_data 
+    scraped_data = reddit_data + google_data
+    t1 = time.time()
+    logger.info(f"SCRAPING TOOK: {t1 - t0:.2f}s")
 
+    # 2) Preprocess
     sentiment_count = {"positive": 0, "neutral": 0, "negative": 0}
     sentiment_confidences = {"positive": [], "neutral": [], "negative": []}
     for post in scraped_data:
@@ -36,18 +47,21 @@ async def analyze_sentiment(request: Request):
         key = label.lower()
         sentiment_count[key] += 1
         sentiment_confidences[key].append(conf)
+    t2 = time.time()
+    logger.info(f"PREPROCESS TOOK: {t2 - t1:.2f}s")
 
+    # 3) Model inference (aggregation)
     total = sum(sentiment_count.values()) or 1
     sentiment_percentages = {
         k: round(v / total * 100, 2) for k, v in sentiment_count.items()
     }
-
     risk_level = calculate_risk(sentiment_percentages, sentiment_confidences)
+    t3 = time.time()
+    logger.info(f"MODEL INFERENCE TOOK: {t3 - t2:.2f}s")
 
+    # 4) DB/Storage
     if user:
-        # Get current time and convert to IST (UTC+5:30)
         ist_time = datetime.utcnow() + timedelta(hours=5, minutes=30)
-        
         insert_data = {
             "user_id": user,
             "query": query,
@@ -59,17 +73,15 @@ async def analyze_sentiment(request: Request):
             "risk_level": risk_level,
             "created_at": ist_time.isoformat(),
         }
-
         res = supabase.table("analyzed_data").insert(insert_data).execute()
-
-        if res.data is None:  # Check if data is None, indicating an error
+        if res.data is None:
             raise HTTPException(status_code=500, detail="Supabase insert failed")
-            
-        # Use the created_at value that was saved to the database
         saved_created_at = insert_data["created_at"]
     else:
-        # If not logged in, just use current date
         saved_created_at = datetime.now().date().isoformat()
+    t4 = time.time()
+    logger.info(f"AGG+SAVE TOOK: {t4 - t3:.2f}s")
+    logger.info(f"TOTAL REQUEST TIME: {t4 - t0:.2f}s")
     
     return JSONResponse({
         "query": query,
