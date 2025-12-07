@@ -39,15 +39,31 @@ async def analyze_sentiment(request: Request):
     logger.info(f"SCRAPING TOOK: {t1 - t0:.2f}s | Reddit: {len(reddit_data)} | Google News: {len(google_data)} | Total: {len(scraped_data)}")
 
     # 2) Preprocess
+    logger.info(f"Processing {len(scraped_data)} items")
     sentiment_count = {"positive": 0, "neutral": 0, "negative": 0}
     sentiment_confidences = {"positive": [], "neutral": [], "negative": []}
-    for post in scraped_data:
+    
+    t_split = 0
+    t_inference = 0
+    for i, post in enumerate(scraped_data):
+        ts = time.time()
         text, _ = post.split(" - ", 1) if " - " in post else (post, "")
+        t_split += time.time() - ts
+        
+        ti = time.time()
         label, conf = analyze_text(text)
+        t_inference += time.time() - ti
+        
         key = label.lower()
         sentiment_count[key] += 1
         sentiment_confidences[key].append(conf)
+        
+        if (i + 1) % 10 == 0:
+            logger.info(f"Processed {i + 1}/{len(scraped_data)} items")
+    
     t2 = time.time()
+    logger.info(f"Text splitting took: {t_split:.2f}s")
+    logger.info(f"Model inference took: {t_inference:.2f}s")
     logger.info(f"PREPROCESS TOOK: {t2 - t1:.2f}s")
 
     # 3) Model inference (aggregation)
