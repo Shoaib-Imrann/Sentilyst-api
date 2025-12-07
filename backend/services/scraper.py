@@ -14,10 +14,10 @@ def scrape_reddit(query):
         res.raise_for_status()
         posts = res.json()["data"]["children"]
         results = [f"{p['data']['title']} - https://reddit.com{p['data']['permalink']}" for p in posts]
-        print(f"Reddit scraped: {len(results)} posts")
+        # print(f"Reddit scraped: {len(results)} posts")
         return results
     except Exception as e:
-        print(f"Reddit scraping failed: {e}")
+        # print(f"Reddit scraping failed: {e}")
         return []
 
 def scrape_google_news(query):
@@ -26,8 +26,8 @@ def scrape_google_news(query):
     try:
         feed = feedparser.parse(url)
         results = [f"{entry.title} - {entry.link}" for entry in feed.entries[:50]]
-        print(f"Google News scraped: {len(results)} articles")
+        # print(f"Google News scraped: {len(results)} articles")
         return results
     except Exception as e:
-        print(f"Google News scraping failed: {e}")
+        # print(f"Google News scraping failed: {e}")
         return []

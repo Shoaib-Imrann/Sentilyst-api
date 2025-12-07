@@ -22,7 +22,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 async def analyze_sentiment(request: Request):
     t0 = time.time()
-    logger.info("Request started")
+    # logger.info("Request started")
     
     data = await request.json()
     query = data.get("query")
@@ -36,18 +36,18 @@ async def analyze_sentiment(request: Request):
     google_data = scrape_google_news(query)
     scraped_data = reddit_data + google_data
     t1 = time.time()
-    logger.info(f"SCRAPING TOOK: {t1 - t0:.2f}s | Reddit: {len(reddit_data)} | Google News: {len(google_data)} | Total: {len(scraped_data)}")
+    # logger.info(f"SCRAPING TOOK: {t1 - t0:.2f}s | Reddit: {len(reddit_data)} | Google News: {len(google_data)} | Total: {len(scraped_data)}")
 
     # 2) Preprocess - cap at 30 items and truncate text
     scraped_data_capped = scraped_data[:30]
     texts = [(post.split(" - ", 1)[0] if " - " in post else post)[:500] for post in scraped_data_capped]
     t2 = time.time()
-    logger.info(f"PREPROCESS TOOK: {t2 - t1:.2f}s | Processed {len(texts)} items")
+    # logger.info(f"PREPROCESS TOOK: {t2 - t1:.2f}s | Processed {len(texts)} items")
     
     # 3) Model inference
     results = analyze_batch(texts)
     t3 = time.time()
-    logger.info(f"MODEL INFERENCE TOOK: {t3 - t2:.2f}s")
+    # logger.info(f"MODEL INFERENCE TOOK: {t3 - t2:.2f}s")
     
     # 4) Aggregation
     sentiment_count = {"positive": 0, "neutral": 0, "negative": 0}
@@ -63,7 +63,7 @@ async def analyze_sentiment(request: Request):
     }
     risk_level = calculate_risk(sentiment_percentages, sentiment_confidences)
     t4 = time.time()
-    logger.info(f"AGGREGATION TOOK: {t4 - t3:.2f}s")
+    # logger.info(f"AGGREGATION TOOK: {t4 - t3:.2f}s")
 
     # 5) DB/Storage
     if user:
@@ -86,8 +86,8 @@ async def analyze_sentiment(request: Request):
     else:
         saved_created_at = datetime.now().date().isoformat()
     t5 = time.time()
-    logger.info(f"DB SAVE TOOK: {t5 - t4:.2f}s")
-    logger.info(f"TOTAL REQUEST TIME: {t5 - t0:.2f}s")
+    # logger.info(f"DB SAVE TOOK: {t5 - t4:.2f}s")
+    # logger.info(f"TOTAL REQUEST TIME: {t5 - t0:.2f}s")
     
     return JSONResponse({
         "query": query,
