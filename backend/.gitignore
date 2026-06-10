@@ -61,3 +61,6 @@ coverage.xml
 *.pem
 *.key
 *.crt
+
+# Downloaded model weights (never commit)
+model_cache/

@@ -1,10 +1,13 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from routes import email_routes
+from fastapi.responses import JSONResponse
 from routes import sentiment_routes
 from routes import news_routes
-from routes import company_routes
-from middleware.auth_middleware import AuthMiddleware
+from middleware.security import SecurityHeadersMiddleware, RequestSizeLimiterMiddleware
+from middleware.security_logger import SecurityEventLogger
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import os
 import logging
 from dotenv import load_dotenv
@@ -18,38 +21,56 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("sentilyst")
 
-app = FastAPI()
+# Rate limiter setup
+limiter = Limiter(key_func=get_remote_address, default_limits=["100/hour"])
+app = FastAPI(docs_url="/docs", redoc_url=None)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Global exception handler - prevent stack trace leaks
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An internal error occurred. Please try again later."}
+    )
 
 @app.on_event("startup")
 async def startup_event():
-    # logger.info("Warming up sentiment model...")
+    logger.info("Starting Sentilyst API...")
+    logger.info(f"CORS Origins: {os.getenv('CORS_ORIGINS', 'http://localhost:3000,http://localhost:5173')}")
     from services.sentiment_analysis import warmup_model
     warmup_model()
-    # logger.info("Model warmed up and ready")
+    logger.info("API ready.")
 
-CLIENT_URL = os.getenv("CLIENT_URL")
-PROD_CLIENT_URL = os.getenv("PROD_CLIENT_URL")
-
-allowed_origins = [CLIENT_URL, PROD_CLIENT_URL] if CLIENT_URL else [PROD_CLIENT_URL]
+# CORS Configuration - configurable via environment
+cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173")
+if cors_origins == "*":
+    origins = ["*"]
+else:
+    origins = [origin.strip() for origin in cors_origins.split(",")]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
-app.add_middleware(AuthMiddleware)
+# Security middleware
+app.add_middleware(SecurityEventLogger)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestSizeLimiterMiddleware, max_size=1024 * 1024)  # 1MB limit
 
-app.include_router(email_routes.router, prefix="/api")
 app.include_router(sentiment_routes.router, prefix="/api")
 app.include_router(news_routes.router, prefix="/api")
-app.include_router(company_routes.router, prefix="/api")
 
 @app.get("/")
-def root():
-    return {"message": "Backend up and ready"}
+@limiter.limit("30/minute")
+def root(request: Request):
+    return {"message": "Sentilyst API - Sentiment Analysis Service", "status": "healthy"}
 
 # if __name__ == "__main__":
 #     import uvicorn

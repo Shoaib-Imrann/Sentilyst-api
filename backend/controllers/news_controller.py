@@ -5,8 +5,12 @@ import os
 from typing import Optional, List
 from dotenv import load_dotenv
 import re
+import logging
+from services.cache import get_news_cache, set_news_cache
 
 load_dotenv()
+
+logger = logging.getLogger("sentilyst")
 
 class NewsArticle(BaseModel):
     title: str
@@ -50,9 +54,16 @@ def categorize_article(title, description):
     return "other"
 
 async def fetch_ma_news():
+    # Check cache first
+    cached_result = get_news_cache()
+    if cached_result:
+        logger.info("Returning cached M&A news")
+        return cached_result
+    
     api_key = os.getenv("NEWSAPI_KEY")
     if not api_key:
-        raise HTTPException(status_code=500, detail="API key not found in environment variables.")
+        logger.warning("News API key not configured")
+        raise HTTPException(status_code=503, detail="News API is not configured. Please set NEWSAPI_KEY environment variable.")
 
     params = {
         "q": '(merger OR acquisition OR "M&A" OR takeover OR "buys out" OR "acquires")',
@@ -61,8 +72,9 @@ async def fetch_ma_news():
         "apiKey": api_key
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         try:
+            logger.info("Fetching M&A news from NewsAPI")
             response = await client.get("https://newsapi.org/v2/everything", params=params)
             response.raise_for_status()
             data = response.json()
@@ -73,9 +85,7 @@ async def fetch_ma_news():
                 categorized_news = {
                     "all": [],
                     "technology": [],
-                    
                     "finance": [],
-              
                     "retail": [],
                     "other": []
                 }
@@ -101,12 +111,21 @@ async def fetch_ma_news():
                         categorized_news["all"].append(news_article)
                         categorized_news[article_category].append(news_article)
                 
+                logger.info(f"Successfully fetched {len(categorized_news['all'])} M&A articles")
+                
+                # Cache the result
+                set_news_cache(categorized_news)
+                
                 return categorized_news
             else:
-                raise HTTPException(status_code=500, detail="Failed to fetch news from NewsAPI.")
-        except httpx.RequestError as e:
-            raise HTTPException(status_code=500, detail=f"Request error: {e}")
+                logger.error(f"NewsAPI returned non-ok status: {data.get('status')}")
+                raise HTTPException(status_code=500, detail="Failed to fetch news from NewsAPI")
+        except httpx.TimeoutException:
+            logger.error("Timeout while fetching news from NewsAPI")
+            raise HTTPException(status_code=504, detail="News API request timed out")
         except httpx.HTTPStatusError as e:
-            raise HTTPException(status_code=e.response.status_code, detail=f"HTTP error: {e}")
+            logger.error(f"HTTP error from NewsAPI: {e.response.status_code}")
+            raise HTTPException(status_code=502, detail="News API returned an error")
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
+            logger.error(f"Unexpected error fetching news: {str(e)}", exc_info=True)
+            raise HTTPException(status_code=500, detail="An error occurred while fetching news")
