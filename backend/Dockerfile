@@ -1,21 +1,23 @@
 FROM python:3.11-slim
 
-WORKDIR /app
+RUN groupadd -r appuser && useradd -r -g appuser -m appuser
 
-# Install dependencies first (cached layer)
+WORKDIR /app
+ENV HF_HOME=/home/appuser/.hf_cache
+
 COPY requirements.txt .
+RUN pip install --no-cache-dir torch==2.12.0 --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download the model during build (cached layer)
-RUN python -c "from transformers import AutoTokenizer, AutoModelForSequenceClassification; \
-    AutoTokenizer.from_pretrained('distilbert-base-uncased-finetuned-sst-2-english'); \
-    AutoModelForSequenceClassification.from_pretrained('distilbert-base-uncased-finetuned-sst-2-english')"
+# Pre-download model into appuser-owned cache (outside /app bind mount)
+RUN mkdir -p /home/appuser/.hf_cache && python -c "from transformers import AutoTokenizer, AutoModelForSequenceClassification; \
+    AutoTokenizer.from_pretrained('distilbert-base-uncased-finetuned-sst-2-english', cache_dir='/home/appuser/.hf_cache'); \
+    AutoModelForSequenceClassification.from_pretrained('distilbert-base-uncased-finetuned-sst-2-english', cache_dir='/home/appuser/.hf_cache')" \
+    && chown -R appuser:appuser /home/appuser/.hf_cache
 
-# Copy application code
 COPY . .
+RUN chmod +x start.sh && chown -R appuser:appuser /app
 
-# Make start script executable
-RUN chmod +x start.sh
+USER appuser
 
-# Run the app
 CMD ["./start.sh"]

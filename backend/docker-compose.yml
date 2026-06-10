@@ -1,0 +1,17 @@
+services:
+  api:
+    build: .
+    container_name: sentilyst-api
+    ports:
+      - "8000:8000"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    env_file:
+      - .env
+    environment:
+      CLIENT_URL: http://localhost:5173
+      HF_HOME: /home/appuser/.hf_cache
+    volumes:
+      - .:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
